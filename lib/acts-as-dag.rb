@@ -25,14 +25,6 @@ module ActsAsDag
     base.send :field, :ancestor_ids, :type => Array, :default => []
     base.send :field, :descendant_ids, :type => Array, :default => []
 
-    # base.send :has_and_belongs_to_many, :parents,
-    #   :class_name => 'KnowledgeNetStore::Point',
-    #   :inverse_of => nil
-    # base.send :has_and_belongs_to_many, :children,
-    #   :class_name => 'KnowledgeNetStore::Point',
-    #   :inverse_of => nil
-
-
     base.send :before_save, :store_family_points # 保存家族成员节点
   end
 
@@ -41,17 +33,17 @@ module ActsAsDag
 
   # 返回所有父对象
   def parents
-    self.class.where(:id.in => self.parent_ids)
+    _by_ids self.parent_ids
   end
 
   # 返回所有子对象
   def children
-    self.class.where(:id.in => self.child_ids)
+    _by_ids self.child_ids
   end
   
   # 返回所有祖先对象
   def ancestors
-    self.class.where(:id.in => self.ancestor_ids)
+    _by_ids self.ancestor_ids
   end
   
   # 返回当前节点以及所有祖先对象ID
@@ -61,12 +53,12 @@ module ActsAsDag
 
   # 返回当前节点以及所有祖先对象
   def self_and_ancestors
-    self.class.where(:id.in => self.self_and_ancestor_ids)
+    _by_ids self.self_and_ancestor_ids
   end
   
   # 返回所有后代对象
   def descendants
-    self.class.where(:id.in => self.descendant_ids)
+    _by_ids self.descendant_ids
   end
   
   # 返回当前节点以及所有后代对象ID
@@ -76,7 +68,7 @@ module ActsAsDag
 
   # 返回当前节点以及所有后代对象
   def self_and_descendants
-    self.class.where(:id.in => self.self_and_descendant_ids)
+    _by_ids self.self_and_descendant_ids
   end
 
 
@@ -112,13 +104,13 @@ module ActsAsDag
     removed_parent_ids = old_parent_ids - new_parent_ids
 
     # 修改新增的父节点
-    self.class.where(:id.in => added_parent_ids).each { |added_parent|
+    _by_ids(added_parent_ids).each { |added_parent|
       added_parent.child_ids = (added_parent.child_ids + [self.id]).uniq
       added_parent.timeless.save
     }
 
     # 修改被移除的父节点
-    self.class.where(:id.in => removed_parent_ids).each { |removed_parent|
+    _by_ids(removed_parent_ids).each { |removed_parent|
       removed_parent.child_ids = removed_parent.child_ids - [self.id]
       removed_parent.timeless.save
     }
@@ -144,13 +136,13 @@ module ActsAsDag
     removed_child_ids = old_child_ids - new_child_ids
 
     # 修改新增的子节点
-    self.class.where(:id.in => added_child_ids).each { |added_child|
+    _by_ids(added_child_ids).each { |added_child|
       added_child.parent_ids = (added_child.parent_ids + [self.id]).uniq
       added_child.timeless.save
     }
 
     # 修改被移除的子节点
-    self.class.where(:id.in => removed_child_ids).each { |removed_child|
+    _by_ids(removed_child_ids).each { |removed_child|
       removed_child.parent_ids = removed_child.parent_ids - [self.id]
       removed_child.timeless.save
     }
@@ -191,12 +183,12 @@ module ActsAsDag
     # 所以当前节点的所有祖先节点的后代都要改变
     
     # 先求出所有需要新增的后代
-    added_descendant_ids = self.class.where(:id.in => added_child_ids).map { |added_child|
+    added_descendant_ids = _by_ids(added_child_ids).map { |added_child|
       added_child.self_and_descendant_ids
     }.flatten.uniq
     
     # 再求出所有需要去掉的后代
-    removed_descendant_ids = self.class.where(:id.in => removed_child_ids).map { |removed_child|
+    removed_descendant_ids = _by_ids(removed_child_ids).map { |removed_child|
       removed_child.self_and_descendant_ids
     }.flatten.uniq
     
@@ -223,12 +215,12 @@ module ActsAsDag
     # 所以当前节点的所有后代节点的祖先都要改变
 
     # 先求出所有需要新增的祖先
-    added_ancestor_ids = self.class.where(:id.in => added_parent_ids).map { |added_parent|
+    added_ancestor_ids = _by_ids(added_parent_ids).map { |added_parent|
       added_parent.self_and_ancestor_ids
     }.flatten.uniq
 
     # 再求出所有需要去掉的祖先
-    removed_ancestor_ids = self.class.where(:id.in => removed_parent_ids).map { |removed_parent|
+    removed_ancestor_ids = _by_ids(removed_parent_ids).map { |removed_parent|
       removed_parent.self_and_ancestor_ids
     }.flatten.uniq
 
@@ -241,5 +233,9 @@ module ActsAsDag
       point.timeless.save 
       # 遍历并调用后代节点的 save，由于后代节点的 child_ids 和 parent_ids 都没有变化，因此不会触发连带 save
     end
+  end
+
+  def _by_ids(ids)
+    self.class.where(:id.in => ids)
   end
 end
