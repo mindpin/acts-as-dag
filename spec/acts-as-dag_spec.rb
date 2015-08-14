@@ -2,18 +2,6 @@
 require 'spec_helper'
 
 describe Point do
-  def _point_should(point, parents, children, ancestors, descendants)
-    point.reload
-    point.parents.map(&:name).should =~ parents.map(&:name)
-    point.children.map(&:name).should =~ children.map(&:name)
-    point.ancestors.map(&:name).should =~ ancestors.map(&:name)
-    point.descendants.map(&:name).should =~ descendants.map(&:name)
-  end
-
-  def build_point(name)
-    Point.create!(:name => name)
-  end
-
   describe "创建第一个节点" do
     before{
       @p1 = Point.create!(:name => "1", :desc => "1desc")

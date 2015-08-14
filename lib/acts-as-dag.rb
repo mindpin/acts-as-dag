@@ -173,6 +173,8 @@ module ActsAsDag
     end
     
     if self.changed.include? 'parent_ids'
+      p "name: #{self.name}"
+      p "change: #{self.changes['parent_ids']}"
       _deal_parent_ids_change(*self.changes['parent_ids'])
     end
   end
@@ -209,11 +211,13 @@ module ActsAsDag
     end
   end
   
-  def _deal_parent_ids_change(old_ids, new_ids)
+  def _deal_parent_ids_change(old_ids, new_ids)    
     new_ids ||= []
     old_ids ||= []
     added_parent_ids = new_ids - old_ids
     removed_parent_ids = old_ids - new_ids
+
+    p "ids: #{old_ids}, #{new_ids}"
 
     # 由于 parents 发生了改变，以致于当前节点的祖先发生了改变
     # 所以当前节点的所有后代节点的祖先都要改变
@@ -235,7 +239,7 @@ module ActsAsDag
     self.descendants.each do |point|
       point.ancestor_ids = (point.ancestor_ids + added_ancestor_ids - removed_ancestor_ids).uniq
       point.timeless.save 
-      # 遍历并调用后代节点的save，由于后代节点的 child_ids 和 parent_ids 都没有变化，因此不会触发连带 save
+      # 遍历并调用后代节点的 save，由于后代节点的 child_ids 和 parent_ids 都没有变化，因此不会触发连带 save
     end
   end
 end

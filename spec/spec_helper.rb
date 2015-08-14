@@ -20,3 +20,19 @@ RSpec.configure do |config|
     Mongoid.purge!
   end
 end
+
+module TestMethod
+  def build_point(name)
+    Point.create!(:name => name)
+  end
+
+  def _point_should(point, parents, children, ancestors, descendants)
+    point.reload
+    point.parents.map(&:name).should =~ parents.map(&:name)
+    point.children.map(&:name).should =~ children.map(&:name)
+    point.ancestors.map(&:name).should =~ ancestors.map(&:name)
+    point.descendants.map(&:name).should =~ descendants.map(&:name)
+  end
+end
+
+include TestMethod
