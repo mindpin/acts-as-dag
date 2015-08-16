@@ -25,7 +25,8 @@ module ActsAsDag
     base.send :field, :ancestor_ids, :type => Array, :default => []
     base.send :field, :descendant_ids, :type => Array, :default => []
 
-    base.send :before_save, :store_family_points # 保存家族成员节点
+    base.send :before_save, :set_ids_uniq
+    base.send :after_save, :store_family_points # 保存家族成员节点
   end
 
   # 查询方法
@@ -95,26 +96,6 @@ module ActsAsDag
   def change_parents(new_parents)
     self.reload
     self.parent_ids = new_parents.map(&:id)
-    
-    old_parent_ids, new_parent_ids = self.changes['parent_ids']
-    old_parent_ids ||= []
-    new_parent_ids ||= []
-
-    added_parent_ids = new_parent_ids - old_parent_ids
-    removed_parent_ids = old_parent_ids - new_parent_ids
-
-    # 修改新增的父节点
-    _by_ids(added_parent_ids).each { |added_parent|
-      added_parent.child_ids = (added_parent.child_ids + [self.id]).uniq
-      added_parent.timeless.save
-    }
-
-    # 修改被移除的父节点
-    _by_ids(removed_parent_ids).each { |removed_parent|
-      removed_parent.child_ids = removed_parent.child_ids - [self.id]
-      removed_parent.timeless.save
-    }
-
     self.save
   end
 
@@ -127,26 +108,6 @@ module ActsAsDag
   def change_children(new_children)
     self.reload
     self.child_ids = new_children.map(&:id)
-
-    old_child_ids, new_child_ids = self.changes['child_ids']
-    old_child_ids ||= []
-    new_child_ids ||= []
-
-    added_child_ids = new_child_ids - old_child_ids
-    removed_child_ids = old_child_ids - new_child_ids
-
-    # 修改新增的子节点
-    _by_ids(added_child_ids).each { |added_child|
-      added_child.parent_ids = (added_child.parent_ids + [self.id]).uniq
-      added_child.timeless.save
-    }
-
-    # 修改被移除的子节点
-    _by_ids(removed_child_ids).each { |removed_child|
-      removed_child.parent_ids = removed_child.parent_ids - [self.id]
-      removed_child.timeless.save
-    }
-
     self.save
   end
 
@@ -156,86 +117,107 @@ module ActsAsDag
   
 
   # 回调方法
+  def set_ids_uniq
+    self.parent_ids.uniq! if self.parent_ids.present?
+    self.child_ids.uniq! if self.child_ids.present?
+    self.ancestor_ids.uniq! if self.ancestor_ids.present?
+    self.descendant_ids.uniq! if self.descendant_ids.present?
+  end
+
   # 此回调方法用于在 child_ids 或 parent_ids 值发生改变时，处理相关节点的 descendant_ids 和 ancestor_ids 记录
-  
-  
   def store_family_points
-    if self.changed.include? 'child_ids'
-      _deal_child_ids_change(*self.changes['child_ids'])
-    end
-    
     if self.changed.include? 'parent_ids'
-      p "name: #{self.name}"
-      p "change: #{self.changes['parent_ids']}"
-      _deal_parent_ids_change(*self.changes['parent_ids'])
+      changes = self.changes['parent_ids'] || [[], []]
+      _parent_ids_changed *changes
+    end
+
+    if self.changed.include? 'child_ids'
+      changes = self.changes['child_ids'] || [[], []] 
+      _child_ids_changed *changes
     end
   end
   
   private
-  
-  def _deal_child_ids_change(old_ids, new_ids)
-    new_ids ||= []
-    old_ids ||= []
-    added_child_ids = new_ids - old_ids
-    removed_child_ids = old_ids - new_ids
-    
-    # 由于 children 发生了改变，以致于当前节点的后代发生了改变
-    # 所以当前节点的所有祖先节点的后代都要改变
-    
-    # 先求出所有需要新增的后代
-    added_descendant_ids = _by_ids(added_child_ids).map { |added_child|
-      added_child.self_and_descendant_ids
-    }.flatten.uniq
-    
-    # 再求出所有需要去掉的后代
-    removed_descendant_ids = _by_ids(removed_child_ids).map { |removed_child|
-      removed_child.self_and_descendant_ids
-    }.flatten.uniq
-    
-    # 处理当前节点的后代记录，由于这是在 before_save 回调中，所以当前节点不用 save
-    self.descendant_ids = (self.descendant_ids + added_descendant_ids - removed_descendant_ids).uniq
-    
-    # 处理当前节点的祖先节点的后代记录
-    self.ancestors.each do |point|
-      point.descendant_ids = (point.descendant_ids + added_descendant_ids - removed_descendant_ids).uniq
-      point.timeless.save 
-      # 遍历并调用祖先节点的save，由于祖先节点的 child_ids 和 parent_ids 都没有变化，因此不会触发连带 save
-    end
-  end
-  
-  def _deal_parent_ids_change(old_ids, new_ids)    
-    new_ids ||= []
-    old_ids ||= []
-    added_parent_ids = new_ids - old_ids
-    removed_parent_ids = old_ids - new_ids
-
-    p "ids: #{old_ids}, #{new_ids}"
-
-    # 由于 parents 发生了改变，以致于当前节点的祖先发生了改变
-    # 所以当前节点的所有后代节点的祖先都要改变
-
-    # 先求出所有需要新增的祖先
-    added_ancestor_ids = _by_ids(added_parent_ids).map { |added_parent|
-      added_parent.self_and_ancestor_ids
-    }.flatten.uniq
-
-    # 再求出所有需要去掉的祖先
-    removed_ancestor_ids = _by_ids(removed_parent_ids).map { |removed_parent|
-      removed_parent.self_and_ancestor_ids
-    }.flatten.uniq
-
-    # 处理当前节点的祖先记录，由于这是在 before_save 回调中，所以当前节点不用 save
-    self.ancestor_ids = (self.ancestor_ids + added_ancestor_ids - removed_ancestor_ids).uniq
-
-    # 处理当前节点的后代节点的祖先记录
-    self.descendants.each do |point|
-      point.ancestor_ids = (point.ancestor_ids + added_ancestor_ids - removed_ancestor_ids).uniq
-      point.timeless.save 
-      # 遍历并调用后代节点的 save，由于后代节点的 child_ids 和 parent_ids 都没有变化，因此不会触发连带 save
-    end
-  end
 
   def _by_ids(ids)
     self.class.where(:id.in => ids)
+  end
+
+  def _parent_ids_changed(_old_parent_ids, _new_parent_ids)
+    return if _old_parent_ids.blank? and _new_parent_ids.blank?
+    old_parent_ids = _old_parent_ids || []
+    new_parent_ids = _new_parent_ids || []
+
+    added_parent_ids = new_parent_ids - old_parent_ids
+    removed_parent_ids = old_parent_ids - new_parent_ids
+    added_ancestor_ids = added_parent_ids
+    removed_ancestor_ids = removed_parent_ids
+
+    save_stack = []
+
+    # 修改所有新增父节点的子节点，并且求出需要增加的祖先
+    _by_ids(added_parent_ids).each do |added_parent|
+      added_parent.child_ids += [self.id]
+      added_ancestor_ids += added_parent.ancestor_ids
+      save_stack << added_parent
+    end
+    added_ancestor_ids.uniq!
+
+    # 修改所有移除父节点的子节点，并且求出需要移除的祖先
+    _by_ids(removed_parent_ids).each do |removed_parent|
+      removed_parent.child_ids -= [self.id]
+      removed_ancestor_ids += removed_parent.ancestor_ids
+      save_stack << removed_parent
+    end
+    removed_ancestor_ids.uniq!
+
+    # 修改自己以及自己的所有子孙节点的祖先
+    self.self_and_descendants.each do |point|
+      # 先减后加，防止去掉不该去掉的祖先
+      point.ancestor_ids -= removed_ancestor_ids
+      point.ancestor_ids += added_ancestor_ids
+      save_stack << point
+    end
+
+    save_stack.uniq.each {|p| p.timeless.save}
+  end
+
+  def _child_ids_changed(_old_child_ids, _new_child_ids)
+    return if _old_child_ids.blank? and _new_child_ids.blank?
+    old_child_ids = _old_child_ids || []
+    new_child_ids = _new_child_ids || []
+
+    added_child_ids = new_child_ids - old_child_ids
+    removed_child_ids = old_child_ids - new_child_ids
+    added_descendant_ids = added_child_ids
+    removed_descendant_ids = removed_child_ids
+
+    save_stack = []
+
+    # 修改所有新增子节点的父节点，并且求出需要增加的子孙
+    _by_ids(added_child_ids).each do |added_child|
+      added_child.parent_ids += [self.id]
+      added_descendant_ids += added_child.descendant_ids
+      save_stack << added_child
+    end
+    added_descendant_ids.uniq!
+
+    # 修改所有移除子节点的父节点，并且求出需要移除的子孙
+    _by_ids(removed_child_ids).each do |removed_child|
+      removed_child.parent_ids -= [self.id]
+      removed_descendant_ids += removed_child.descendant_ids
+      save_stack << removed_child
+    end
+    removed_descendant_ids.uniq!
+
+    # 修改自己以及自己的所有祖先节点的子孙
+    self.self_and_ancestors.each do |point|
+      # 先减后加，防止去掉不该去掉的子孙
+      point.descendant_ids -= removed_descendant_ids
+      point.descendant_ids += added_descendant_ids
+      save_stack << point
+    end
+
+    save_stack.uniq.each {|p| p.timeless.save}
   end
 end

@@ -33,6 +33,15 @@ module TestMethod
     point.ancestors.map(&:name).should =~ ancestors.map(&:name)
     point.descendants.map(&:name).should =~ descendants.map(&:name)
   end
+
+  def check_relation(point, relation_name, arr)
+    point.reload
+    array_name_eq point.send(relation_name), arr
+  end
+
+  def array_name_eq(arr1, arr2)
+    arr1.map(&:name).should =~ arr2.map(&:name)
+  end
 end
 
 include TestMethod
