@@ -155,14 +155,7 @@ module ActsAsDag
 
     save_stack = []
 
-    # 修改所有新增父节点的子节点，并且求出需要增加的祖先
-    _by_ids(added_parent_ids).each do |added_parent|
-      added_parent.child_ids += [self.id]
-      added_ancestor_ids += added_parent.ancestor_ids
-      save_stack << added_parent
-    end
-    added_ancestor_ids.uniq!
-
+    # 先处理移除，后处理新增，否则会导致移除不必要的关联
     # 修改所有移除父节点的子节点，并且求出需要移除的祖先
     _by_ids(removed_parent_ids).each do |removed_parent|
       removed_parent.child_ids -= [self.id]
@@ -170,6 +163,14 @@ module ActsAsDag
       save_stack << removed_parent
     end
     removed_ancestor_ids.uniq!
+
+    # 修改所有新增父节点的子节点，并且求出需要增加的祖先
+    _by_ids(added_parent_ids).each do |added_parent|
+      added_parent.child_ids += [self.id]
+      added_ancestor_ids += added_parent.ancestor_ids
+      save_stack << added_parent
+    end
+    added_ancestor_ids.uniq!
 
     # 修改自己以及自己的所有子孙节点的祖先
     self.self_and_descendants.each do |point|
@@ -194,14 +195,7 @@ module ActsAsDag
 
     save_stack = []
 
-    # 修改所有新增子节点的父节点，并且求出需要增加的子孙
-    _by_ids(added_child_ids).each do |added_child|
-      added_child.parent_ids += [self.id]
-      added_descendant_ids += added_child.descendant_ids
-      save_stack << added_child
-    end
-    added_descendant_ids.uniq!
-
+    # 先处理移除，后处理新增，否则会导致移除不必要的关联
     # 修改所有移除子节点的父节点，并且求出需要移除的子孙
     _by_ids(removed_child_ids).each do |removed_child|
       removed_child.parent_ids -= [self.id]
@@ -209,6 +203,14 @@ module ActsAsDag
       save_stack << removed_child
     end
     removed_descendant_ids.uniq!
+
+    # 修改所有新增子节点的父节点，并且求出需要增加的子孙
+    _by_ids(added_child_ids).each do |added_child|
+      added_child.parent_ids += [self.id]
+      added_descendant_ids += added_child.descendant_ids
+      save_stack << added_child
+    end
+    added_descendant_ids.uniq!
 
     # 修改自己以及自己的所有祖先节点的子孙
     self.self_and_ancestors.each do |point|
