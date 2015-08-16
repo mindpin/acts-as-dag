@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    acts-as-dag (0.0.1)
+    acts-as-dag (0.0.2)
       mongoid (~> 4.0)
 
 GEM
