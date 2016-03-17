@@ -2,10 +2,9 @@ PATH
   remote: .
   specs:
     acts-as-dag (0.0.2)
-      mongoid (~> 4.0)
 
 GEM
-  remote: http://ruby.taobao.org/
+  remote: https://ruby.taobao.org/
   specs:
     activemodel (4.2.3)
       activesupport (= 4.2.3)
@@ -53,5 +52,9 @@ PLATFORMS
 DEPENDENCIES
   acts-as-dag!
   bundler (~> 1.6)
+  mongoid (>= 4.0, < 6.0)
   rake
   rspec (~> 2.3)
+
+BUNDLED WITH
+   1.11.2
